@@ -1,0 +1,186 @@
+#!/usr/bin/env python
+
+import os
+import argparse
+import sqlite3
+
+
+DB = os.path.expanduser('~') + '/todo.db'
+BLUE = '\033[94m'
+GREEN = '\033[92m'
+RED = '\033[91m'
+ENDC = '\033[0m'
+
+
+def get_parser():
+    ''' Creates an argument parser
+
+    Three subparsers are created, one for each command {ls, add, rem}.
+    The "ls" command has no other argument. The "add" command takes
+    the rest of the line as the task to add to the list. The "rem"
+    command has another argument with the task_id.
+    '''
+
+    # define parser 
+    parser = argparse.ArgumentParser(
+        prog='todo',
+        description='Simple CLI for tracing TODO tasks',
+    )
+
+    # subparsers
+    subparsers = parser.add_subparsers(dest='command')
+
+    # list all tasks
+    _ = subparsers.add_parser(
+        'ls',
+        description='List all tasks'
+    )
+
+    # add a task
+    subparser_add = subparsers.add_parser(
+        'add',
+        description='Add a task to the list'
+    )
+    subparser_add.add_argument(
+        'task',
+        nargs='*',
+        help='The task to add'
+    )
+
+    # remove a task
+    subparser_rem = subparsers.add_parser(
+        'rem',
+        description='Remove a task'
+    )
+    subparser_rem.add_argument(
+        'task_id',
+        type=int,
+        help='The id of the task to be removed'
+    )
+
+    return parser
+
+def parse_arguments():
+    ''' Parses the arguments to the program.
+os.path.expanduser('~') + '/todo.db'
+    If the arguments are not correct the program stops.
+    '''
+
+    # get the parser
+    parser = get_parser()
+
+    # parse arguments
+    args = parser.parse_args()
+
+    return args
+    
+
+def init_db():
+    ''' Initialize the database.
+
+    Checks if the database exists and if not creates one.
+    '''
+
+    with sqlite3.connect(DB) as conn:
+
+        cur = conn.cursor()        
+        cur.execute(
+            '''
+            create table if not exists tasks (
+            Date date default current_date,
+            Task text
+            )
+            '''
+        )
+
+
+def pretty_print(rows):
+    '''
+    Prints all rows with colors
+    '''
+
+    if len(rows) == 0:
+        print('No task in the TODO list')
+        return
+
+    rows = [('ID', 'Date', 'Task')] + rows
+    for i, row in enumerate(rows):
+
+        ID = row[0]
+        date = row[1]
+        sep = '\n' + 18*' '
+        task = sep.join([row[2][i:i + 80] for i in range(0, len(row[2]), 80)])
+
+        line = '{}{:<4} {}{:<12} {}{:<80}{}'.format(
+            RED, ID,
+            GREEN, date,
+            BLUE, task,
+            ENDC
+        )
+        print(line)
+
+
+def list_all_tasks():
+    '''
+    List all tasks in the database
+    '''
+
+    with sqlite3.connect(DB) as conn:
+
+        cur = conn.cursor()
+        cur.execute('select rowid, * from tasks')
+        rows = cur.fetchall()
+
+    pretty_print(rows)
+
+
+def add_task(task):
+    '''
+    Add a task to the list
+    '''
+
+    with sqlite3.connect(DB) as conn:
+
+        cur = conn.cursor()
+        cur.execute(f'insert into tasks (task) values ("{task}")')
+
+    print('Added task to list')
+
+
+def remove_task(task_id):
+    '''
+    Remove a task with its ID
+    '''
+
+    with sqlite3.connect(DB) as conn:
+
+        cur = conn.cursor()
+        cur.execute(f'delete from tasks where rowid = {task_id}')
+
+    print('Removed task from list')
+
+
+def main():
+
+    # parse arguments
+    args = parse_arguments()
+
+    # init database
+    init_db()
+
+    # check command
+    if args.command == 'ls':
+        list_all_tasks()
+    elif args.command == 'add':
+        task = ' '.join(args.task)
+        add_task(task)
+    elif args.command == 'rem':
+        task_id = args.task_id
+        remove_task(task_id)
+    else:
+        list_all_tasks()
+
+
+if __name__ == '__main__':
+
+    main()
